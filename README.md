@@ -56,7 +56,7 @@ This is for educational purposes only. Use at your own risk.
 
 ## 🧠 Source Code Included
 Still think it’s a rat?  
-👉 Check `/[SRC]/`, full CustomTkinter Python source provided.  
+👉 Check `/[SOURCE]/`, full CustomTkinter Python source provided.  
 > Feel free to inspect, compile, or improve.
 
 ---
