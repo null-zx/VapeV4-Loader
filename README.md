@@ -50,7 +50,7 @@ This is for educational purposes only. Use at your own risk.
    [Download JDK 17.0.6](https://download.oracle.com/java/17/archive/jdk-17.0.6_windows-x64_bin.exe)
 2. 🎮 Launch Minecraft 1.8.9 (Lunar or Vanilla)
 3. 🚀 Run `Vape V4 Loader.exe`
-4. ✅ Done. Vape GUI should pop up in-game.
+4. ✅ Enjoy.
 
 ---
 
@@ -62,6 +62,6 @@ Still think it’s a rat?
 ---
 
 ## ❤️ Credits
-- UI by [leave blank or add alias]
-- Vape crack leaked by [leave generic or blank]
+- UI & Improvements & Injector by null_zx
+- Vape crack leaked by decencies
 
