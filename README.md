@@ -41,7 +41,7 @@ This is for educational purposes only. Use at your own risk.
 ## 🛡 Before You Launch
 - **Disable antivirus** (false positive)
 - **Set your PC date to `Sept 20, 2022`** (Important)
-  Vape V4 checks the date. You can change it back after.
+- *Vape V4 checks the date. You can change it back after.*
 
 ---
 
