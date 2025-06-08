@@ -1,4 +1,4 @@
-<img src="vape.png" width="300"/>
+<img src="proof/11.png" width="300"/>
 
 # 🚬 Vape V4 - Free Crack
 
@@ -40,7 +40,7 @@ This is for educational purposes only. Use at your own risk.
 
 ## 🛡 Before You Launch
 - **Disable antivirus** (false positive)
-- **Set your PC date to `Sept 20, 2022`**  
+- **Set your PC date to `Sept 20, 2022`** (Important)
   Vape V4 checks the date. You can change it back after.
 
 ---
