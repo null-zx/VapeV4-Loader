@@ -16,7 +16,7 @@ Here’s Vape V4 in action — no fakes, no scams:
 
 | UI Preview | Injector Running | Vape Menu In-Game |
 |------------|------------------|-------------------|
-| ![](proof/1.png) | ![](proof/2.png) | ![](proof/3.png) |
+| ![](img/1.png) | ![](img/2.png) | ![](img/3.png) |
 
 ---
 
