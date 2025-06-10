@@ -12,6 +12,7 @@ import win32process
 import webbrowser
 from datetime import datetime
 import re
+import ctypes  # Added for admin privileges
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
@@ -44,6 +45,10 @@ class SplashScreen(ctk.CTk):
         self.status_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.status_frame.pack(pady=20, padx=20, fill="x")
         
+        # Configure grid for status frame
+        self.status_frame.columnconfigure(0, weight=1)  # Status label column
+        self.status_frame.columnconfigure(1, weight=0)  # Button column
+        
         # Java Check
         self.java_status = ctk.CTkLabel(
             self.status_frame,
@@ -53,7 +58,7 @@ class SplashScreen(ctk.CTk):
         )
         self.java_status.grid(row=0, column=0, sticky="w", padx=10, pady=5)
         
-        # Time Check
+        # Time Check with button
         self.time_status = ctk.CTkLabel(
             self.status_frame,
             text="System Time : Checking...",
@@ -61,6 +66,18 @@ class SplashScreen(ctk.CTk):
             text_color="#aaaaaa"
         )
         self.time_status.grid(row=1, column=0, sticky="w", padx=10, pady=5)
+        
+        # NEW: "Set Automatically" button
+        self.set_time_btn = ctk.CTkButton(
+            self.status_frame,
+            text="Set Automatically",
+            width=120,
+            state="disabled",
+            fg_color="#222",
+            hover_color="#333",
+            command=self.set_system_time
+        )
+        self.set_time_btn.grid(row=1, column=1, padx=(0, 10), pady=5)
         
         # Download button (initially hidden)
         self.download_btn = ctk.CTkButton(
@@ -125,6 +142,8 @@ class SplashScreen(ctk.CTk):
                 major_version = int(version_match.group(1))
                 if major_version >= 17:
                     self.update_java_status("Java 17+ : Installed", "#4CAF50")
+                    # Disable download button if Java is installed
+                    self.download_btn.configure(state="disabled")
                     return True
                 else:
                     self.update_java_status(f"Java 17+ required (found {major_version})", "#F44336")
@@ -162,19 +181,47 @@ class SplashScreen(ctk.CTk):
         current_date = datetime.now()
         
         if current_date.date() == safe_date.date():
-            self.update_time_status("System Time : Safe Zone (2022-09-20)", "#4CAF50")
+            self.update_time_status("System Time : Safe Zone (2022-09-20)", "#4CAF50", True)
             return True
         else:
             self.update_time_status(
                 f"System Time : {current_date.strftime('%Y-%m-%d')} (requires 2022-09-20)", 
-                "#F44336"
+                "#F44336",
+                False
             )
         return False
         
-    def update_time_status(self, text, color):
-        """Update time status label"""
+    def update_time_status(self, text, color, is_safe):
+        """Update time status label and button state"""
         self.time_status.configure(text=text, text_color=color)
+        # Enable/disable set time button based on time status
+        self.set_time_btn.configure(state="normal" if not is_safe else "disabled")
         self.enable_launch_if_ready()
+        
+    # NEW: System time setting function
+    def set_system_time(self):
+        """Attempt to set system time to required date (requires admin privileges)"""
+        try:
+            # Format: MM-DD-YYYY
+            target_date = "09-20-2022"
+            
+            # Request admin privileges for time change
+            if ctypes.windll.shell32.IsUserAnAdmin():
+                # We already have admin privileges
+                subprocess.run(f'date {target_date}', shell=True, check=True)
+                self.update_time_status("System time set successfully! Restarting check...", "#4CAF50", False)
+            else:
+                # Re-run with admin privileges
+                ctypes.windll.shell32.ShellExecuteW(
+                    None, "runas", "cmd.exe", f"/c date {target_date}", None, 1
+                )
+                self.update_time_status("Admin request sent. Please accept UAC prompt.", "#FF9800", False)
+            
+            # Re-check time after a short delay
+            threading.Timer(3.0, self.check_time).start()
+            
+        except Exception as e:
+            self.update_time_status(f"Error setting time: {str(e)}", "#F44336", False)
         
     def enable_launch_if_ready(self):
         """Enable launch button if all dependencies are met"""
@@ -217,7 +264,7 @@ class VapeUI(ctk.CTk):
         self.logo_tk = ImageTk.PhotoImage(self.logo_raw)
         self.canvas.create_image(540, 220, image=self.logo_tk)
 
-        self.label = self.canvas.create_text(540, 300, text="Select a Minecraft to use",
+        self.label = self.canvas.create_text(540, 300, text="Select a Minecraft Process",
                                              font=("Segoe UI", 16, "bold"), fill="#cccccc")
         self.sublabel = self.canvas.create_text(540, 325, text="Make sure game is fully loaded first",
                                                 font=("Segoe UI", 13), fill="#666666")
@@ -241,7 +288,7 @@ class VapeUI(ctk.CTk):
         self.progress_bar_widget = None
         self.progress_frame = None
         self.inject_bat_path = None
-        self.minecraft_processes = []
+        self.java_processes = []  # Changed from minecraft_processes
         self.injection_active = False
         self.process_cache = {}
         self.is_dragging = False
@@ -249,23 +296,32 @@ class VapeUI(ctk.CTk):
         self.last_process_check = 0
         self.check_scheduled = False
 
-        # Start the scanner immediately and schedule the first check
+        # Start the scanner immediately and schedule regular checks
         self.scanner_thread = threading.Thread(target=self.process_scanner_loop, daemon=True)
         self.scanner_thread.start()
+        
+        # Start the UI update scheduler
+        self.schedule_process_check()
 
         self.note = self.canvas.create_text(
             15, 595, anchor="sw",
-            text="No Minecraft process showing? Make sure the game is running.",
+            text="No Minecraft processes showing? Make sure the game is running.",
             font=("Segoe UI", 12),
             fill="#3A3A3A"
         )
+        
+    def schedule_process_check(self):
+        """Schedule process check every 2000ms"""
+        if not self.injection_active:
+            self.after(2000, self.schedule_process_check)
+            self.detect_java_processes()
 
     def process_scanner_loop(self):
-        """Persistent background scanner for Minecraft processes with 2000ms interval"""
+        """Persistent background scanner for Java processes with 2000ms interval"""
         while True:
             try:
                 if not self.is_dragging and not self.injection_active:
-                    self.detect_minecraft()
+                    self.detect_java_processes()
                 time.sleep(2.0)
             except Exception as e:
                 print(f"Scanner error: {e}")
@@ -298,24 +354,24 @@ class VapeUI(ctk.CTk):
 
         fade()
 
-    def detect_minecraft(self):
-        """Robust Minecraft detection with command-line verification"""
+    def detect_java_processes(self):
+        """Detect all Java processes and their window titles"""
         try:
             if self.injection_active or self.is_dragging:
                 return
 
-            current_time = time.time()
             found_pids = set()
 
-            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            for proc in psutil.process_iter(['pid', 'name']):
                 try:
-                    if not proc.info['name']:
+                    name = proc.info['name']
+                    if not name:
                         continue
 
-                    if 'java' in proc.info['name'].lower() or 'javaw' in proc.info['name'].lower():
-                        cmdline = " ".join(proc.info.get('cmdline', [])).lower()
-                        if 'minecraft' in cmdline or 'net.minecraft' in cmdline:
-                            found_pids.add(proc.info['pid'])
+                    # Detect all Java processes (java.exe or javaw.exe)
+                    name_lower = name.lower()
+                    if name_lower in ['java.exe', 'javaw.exe']:
+                        found_pids.add(proc.info['pid'])
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
 
@@ -325,23 +381,25 @@ class VapeUI(ctk.CTk):
                     title = self.process_cache[pid]
                 else:
                     title = self.get_window_title_fast(pid)
+                    # Use "No Title" if we couldn't get a window title
+                    if not title:
+                        title = "No Title"
                     self.process_cache[pid] = title
 
-                if title:
-                    new_processes.append({
-                        "pid": pid,
-                        "title": f"{title} (PID: {pid})"
-                    })
+                new_processes.append({
+                    "pid": pid,
+                    "title": f"{title} (PID: {pid})"
+                })
 
             new_pids = sorted(p['pid'] for p in new_processes)
-            old_pids = sorted(p['pid'] for p in self.minecraft_processes)
+            old_pids = sorted(p['pid'] for p in self.java_processes)
 
             if new_pids != old_pids:
-                self.minecraft_processes = new_processes
+                self.java_processes = new_processes
                 self.update_process_buttons()
 
         except Exception as e:
-            print("Error detecting Minecraft:", e)
+            print("Error detecting Java processes:", e)
 
     def get_window_title_fast(self, pid):
         """Optimized window title fetcher with timeout"""
@@ -358,7 +416,7 @@ class VapeUI(ctk.CTk):
             except:
                 pass
 
-        data = {'done': False, 'title': None}
+        data = {'done': False, 'title': "No Title"}  # Default to "No Title"
         try:
             start = time.time()
             while not data['done'] and (time.time() - start) < 0.1:
@@ -378,23 +436,23 @@ class VapeUI(ctk.CTk):
                 btn.destroy()
             self.process_buttons.clear()
 
-            if not self.minecraft_processes:
+            if not self.java_processes:
                 self.canvas.itemconfigure(self.label, text="No Minecraft Found")
                 self.canvas.itemconfigure(self.sublabel, text="Open Minecraft to continue")
                 return
 
-            self.canvas.itemconfigure(self.label, text="Select a Minecraft to use")
+            self.canvas.itemconfigure(self.label, text="Select a Minecraft Process")
             self.canvas.itemconfigure(self.sublabel, text="Make sure game is fully loaded first")
 
-            for i, proc in enumerate(self.minecraft_processes):
-                button = ctk.CTkButton(self, text=proc["title"], width=250, height=40,
+            for i, proc in enumerate(self.java_processes):
+                button = ctk.CTkButton(self, text=proc["title"], width=350, height=40,
                                        corner_radius=6,
                                        font=("Segoe UI", 14),
                                        fg_color="#1e1e1e", hover_color="#2c2c2c",
                                        text_color="#cccccc",
                                        border_color="#333", border_width=2,
                                        command=lambda p=proc['pid']: self.inject_and_animate(p))
-                button.place(x=415, y=360 + i * 50)
+                button.place(x=365, y=360 + i * 50)
                 self.process_buttons.append(button)
 
         self.after(0, update_ui)
@@ -476,7 +534,7 @@ class VapeUI(ctk.CTk):
     def end_move(self, event):
         self.is_dragging = False
         # Immediately trigger a new process scan after dragging
-        threading.Thread(target=self.detect_minecraft, daemon=True).start()
+        threading.Thread(target=self.detect_java_processes, daemon=True).start()
 
     def minimize_safe(self):
         self.overrideredirect(False)
